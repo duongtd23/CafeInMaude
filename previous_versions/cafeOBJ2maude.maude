@@ -1155,7 +1155,7 @@ the \verb"maps2maps" function shown above to the body:
              else P'
              fi /\
       QIL := '\n '\n 'Reduction 'applied.
-             'The 'goal 'was if B then nil else 'not fi 'discarded
+             'The 'goal 'was if B then nil else 'not fi 'discharged
              if B and (not B')
              then '\n 'Next 'goal 'is '\! printIndex(fst(PO')) '\o
              else if B'
@@ -1175,7 +1175,7 @@ the \verb"maps2maps" function shown above to the body:
              else P'
              fi /\
       QIL := '\n '\n 'Reduction 'applied.
-             'The 'goal 'was if B then nil else 'not fi 'discarded
+             'The 'goal 'was if B then nil else 'not fi 'discharged
              if B and (not B')
              then '\n 'Next 'goal 'is '\! printIndex(fst(PO')) '\o
              else if B'
@@ -2211,8 +2211,9 @@ the \verb"maps2maps" function shown above to the body:
              then '\t ':imp ' '`[ Q '`] ' '. '\n '\n
              else '\t ':imp ' '`[ Q '`] ' 'by ' '`{ printSub(SB) '`} '\n '\n
              fi [print "Imp"] .
-  eq developProof(P, NL y PO, SIS, MACS) = inferNewProof(P, NL y PO, SIS, MACS)
-                           [owise print "Try reduction and implication for " NL] .
+  ceq developProof(P, NL y PO, SIS, MACS) = inferNewProof(P, NL y PO, SIS, MACS)
+   if eq T = 'true.Bool [AtS] . := getGoal(P, NL)
+                           [owise print "Try reduction and implication for " NL " (" T ")"] .
 
   -------------------------------------------------------------------------------------
   -------------------------------------------------------------------------------------
@@ -3285,21 +3286,18 @@ and \verb"sizeTL" just computes the size of a list of terms:
   eq traverseEquals(M, TrS, N, SB) = SB [owise] .
 
   op getEquals : Term -> TermSet .
-  eq getEquals(C) = emptyTermSet .
-  eq getEquals(V) = emptyTermSet .
-  eq getEquals('_=_[TL]) = '_=_[TL] .
-  eq getEquals(Q[TL]) = getEquals*(TL) [owise] .
+  eq getEquals(T) = getEquals(T, emptyTermSet) .
 
-  op getEquals* : TermList -> TermSet .
-  eq getEquals*(empty) = emptyTermSet .
-  eq getEquals*((T, TL)) = getEquals(T) | getEquals*(TL) .
+  op getEquals : Term TermSet -> TermSet .
+  eq getEquals(C, TrS) = TrS .
+  eq getEquals(V, TrS) = TrS .
+  eq getEquals('_=_[TL], TrS) = ('_=_[TL]) | TrS .
+  eq getEquals(Q[TL], TrS) = getEquals*(TL, TrS) [owise] .
 
-
-
-
-
-
-
+  op getEquals* : TermList TermSet -> TermSet .
+  eq getEquals*(empty, TrS) = TrS .
+  ceq getEquals*((T, TL), TrS) = getEquals*(TL, TrS')
+   if TrS' := getEquals(T, TrS) .
 
   sort SbSet .
   subsort Substitution < SbSet .
@@ -3325,7 +3323,41 @@ and \verb"sizeTL" just computes the size of a list of terms:
   var  IP : ImpPair .
 
   op tryImplication : Module Term TermList -> ImpTryRes .
-  eq tryImplication(M, T, TL) = tryImplication(M, T, TL, extraImpLevels) .
+  eq tryImplication(M, T, TL) = if preinstantiationOn
+                                then tryImplication(M, T, TL, extraImpLevels)
+                                else trySimpleImplication(M, T, TL, extraImpLevels)
+                                fi .
+
+
+  --- Preinstantiation off
+  op trySimpleImplication : Module Term TermList Nat -> ImpTryRes .
+  ceq trySimpleImplication(M, Q[TL], (TL1, Q[TL'], TL2), N) =
+                                    if T'' == 'true.Bool
+                                    then [IP, true]
+                                    else $trySimpleImplication(M, '_implies_[T', Q[TL]],
+                                                         (TL1, Q[TL'], TL2),
+                                                         (TL1, Q[TL'], TL2), IP, N)
+                                    fi
+   if SB := basicSB*(TL', TL) /\
+      T' := substitute(Q[TL'], SB) /\
+      T'' := reduce(M, '_implies_[T', Q[TL]]) /\
+      Q' := getLabel(M, Q[TL']) /\
+      IP := [T', Q', SB] .
+
+  op $trySimpleImplication : Module Term TermList TermList ImpPair Nat -> ImpTryRes .
+  eq $trySimpleImplication(M, T, empty, TL, IP, N) = [nilIPL, false] .
+  eq $trySimpleImplication(M, T, TL, TL', IP, 0) = [nilIPL, false] .
+  ceq $trySimpleImplication(M, T, (T', TL), TL', IP, s(0)) = [IP [T'', Q, SB'], true]
+   if numVars(T') <= numInstVars /\
+      [T'', SB', Q] TSPS := allIns(M, [T', none, getLabel(M, T')]) /\
+      reduce(M, '_implies_[T'', T]) == 'true.Bool [print "D " TSPS] .
+  ceq $trySimpleImplication(M, T, (T', TL), TL', IP, s(s(N))) = [IP [T'', Q, SB'], true]
+   if numVars(T') <= numInstVars /\
+      [T'', SB', Q] TSPS := allIns(M, [T', none, getLabel(M, T')]) /\
+      [IPL, true] := $trySimpleImplication(M, '_implies_[T'', T], TL', TL', IP, s(N)) [print "C " TSPS] .
+  eq $trySimpleImplication(M, T, (T', TL), TL', IP, s(N)) = $trySimpleImplication(M, T, TL, TL', IP, s(N)) [owise print "B " TL "\nCon " T] .
+
+  --- Preinstantiation on
 
   op tryImplication : Module Term TermList Nat -> ImpTryRes .
   ceq tryImplication(M, Q[TL], (TL1, Q[TL'], TL2), N) =
@@ -3343,35 +3375,35 @@ and \verb"sizeTL" just computes the size of a list of terms:
 
   op $tryImplication : Module Term TermList TermList ImpPair Nat -> ImpTryRes .
   eq $tryImplication(M, T, empty, TL, IP, N) = [nilIPL, false] .
-  ceq $tryImplication(M, T, (T', TL), TL', IP, N) = [IP [T'', Q, SB'], true]
+  eq $tryImplication(M, T, TL, TL', IP, 0) = [nilIPL, false] .
+  ceq $tryImplication(M, T, (T', TL), TL', IP, s(0)) = [IP [T'', Q, SB'], true]
    if (SB + SBS) := preSubstitution(M, T', T) /\
       T1 := substitute(T', SB) /\
-      numVars(T1) < 3 /\
+      numVars(T1) <= numInstVars /\
       [T'', SB', Q] TSPS := allIns(M, [T1, SB, getLabel(M, T')]) /\
       reduce(M, '_implies_[T'', T]) == 'true.Bool .
-  ceq $tryImplication(M, T, (T', TL), TL', IP, s(N)) = [IP [T'', Q, SB'], true]
+  ceq $tryImplication(M, T, (T', TL), TL', IP, s(s(N))) = [IP [T'', Q, SB'], true]
    if (SB + SBS) := preSubstitution(M, T', T) /\
       T1 := substitute(T', SB) /\
-      numVars(T1) < 3 /\
+      numVars(T1) <= numInstVars /\
       [T'', SB', Q] TSPS := allIns(M, [T1, SB, getLabel(M, T')]) /\
-      [IPL, true] := $tryImplication(M, '_implies_[T'', T], TL', TL', IP, N) .
-  eq $tryImplication(M, T, (T', TL), TL', IP, N) = $tryImplication(M, T, TL, TL', IP, N) [owise] .
+      [IPL, true] := $tryImplication(M, '_implies_[T'', T], TL', TL', IP, s(N)) .
+  eq $tryImplication(M, T, (T', TL), TL', IP, s(N)) = $tryImplication(M, T, TL, TL', IP, s(N)) [owise print "A"] .
 
   op allIns : Module TermSubPairSet -> TermSubPairSet [memo] .
   ceq allIns(M, [T, SB, Q] TSPS) = allIns(M, TSPS TSPS')
    if hasVars(T) /\
-      TSPS' := allIns([T, SB, Q], getOps(M)) .
+      TSPS' := allIns([T, SB, Q], getOps(M), mtTSPS) .
   eq allIns(M, TSPS) = TSPS [owise] .
 
-  op allIns : TermSubPair OpDeclSet ~> TermSubPairSet .
-  ceq allIns([Q[TL, V, TL'], SB, Q'], op Q'' : nil -> Ty [metadata(S) AtS] . ODS) =
-                                        [Q[TL, C, TL'], V <- C ; SB, Q']
-                                        allIns([Q[TL, V, TL'], SB, Q'], ODS)
+  op allIns : TermSubPair OpDeclSet TermSubPairSet ~> TermSubPairSet .
+  ceq allIns([Q[TL, V, TL'], SB, Q'], op Q'' : nil -> Ty [metadata(S) AtS] . ODS, TSPS) =
+                                        allIns([Q[TL, V, TL'], SB, Q'], ODS, TSPS [Q[TL, C, TL'], V <- C ; SB, Q'])
    if not hasVars*(TL) /\
       Ty := getType(V) /\
       (S == "generated-si" or S == "tc") /\
       C := qid(string(Q'') + "." + string(Ty)) .
-  eq allIns(TSP, ODS) = mtTSPS [owise] .
+  eq allIns(TSP, ODS, TSPS) = TSPS [owise] .
 
   op basicSB* : TermList TermList -> Substitution .
   eq basicSB*(empty, empty) = none .
@@ -6649,7 +6681,7 @@ set show loop stats off .
 set show loop timing off .
 
 *** for debugging purposes
-set print attribute off .
+set print attribute on .
 
 set show advisories off .
 

@@ -1,8 +1,11 @@
 CafeInMaude: A translation from CafeOBJ into Maude
 ==================================================
 
-CafeInMaude is a tool to introduce CafeOBJ specifications into the Maude system (please
-note that the current version of CafeInMaude works for Maude 2.7).
+CafeInMaude is a tool to introduce CafeOBJ specifications into the Maude system. Please note
+that the current version of CafeInMaude runs in Maude alpha132 (December 2020), please visit
+the *previous versions* folder for Maude 2 versions (note older versions do not support most
+of the features, like parallel execution).
+
 This tool has the following features:
 * Supports operators, predicates, equations, and transitions, and all their related
 attributes.
@@ -11,7 +14,9 @@ attributes.
 * It provides the CafeInMaude Proof Assistant (CiMPA) for performing inductive proofs.
 * It provides the CafeInMaude Proof Generator (CiMPG) for inferring proof scripts
 from proof scores.
-* Full integration with Maude tools (such as the model checker or the citp).
+* It provides the CafeInMaude Proof Generator & Fixer-Upper (CiMPG+F) for generating
+proofs.
+* It supports multi-core computation.
 
 The current translation has a number of limitations:
 * Behavioral specifications are not supported.
@@ -25,7 +30,9 @@ The code of 'CafeInMaude' is contained in a GIT repository on GitHub, whose URL 
 https://github.com/ariesco/CafeInMaude. To get a copy of the repository you only
 have to write in your Linux/MacOS console:
 
+```
     $ git clone https://github.com/ariesco/CafeInMaude
+```
 
 This will create a CafeInMaude folder containing the source code of the tool as well as
 several examples.
@@ -33,18 +40,85 @@ several examples.
 Using the tool
 --------------
 
-1. The easiest way to use CafeInMaude is to configure the **CafeInMaude** script by
-editing the location of the Maude binary in the variable *MAUDE*. It is assumed that
-the Full Maude file is accessible in the folder where Maude is located or in the current
-folder.
+1. The tool is started by just loading the **CafeInMaude.maude** file into the Maude system:
 
-Once this information is set, CafeOBJ specifications can be loaded into the Maude system.
-For example, you can execute the alternating bit protocol example available in the
-examples folder by typing:
+```
+    $ maude -allow-files src/cafeInMaude.maude
+```
 
-    $ ./CafeInMaude examples/abp.cafe
+Once the tool is started, the **load** command can be used for loading files. For example, we can load
+the 2-processes mutal exclusion protocol specification by typing:
 
-Once a module has been loaded, Maude commands can be used in the usual way.
+```
+    $ CafeInMaude> load ../examples/CCiMPG/2p-mutex/2p-mutex.cafe .
+```
+
+Likewise, we would load the proof related to this protocol with the following command:
+
+```
+    $ CafeInMaude> load ../examples/CCiMPG/2p-mutex/all_proofs.cafe .
+```
+
+Finally, we can set the file for storing proofs as follows:
+
+```
+    $ CafeInMaude> set-output ../examples/CCiMPG/2p-mutex/2p-proof.cafe .
+```
+
+Because CiMPG+F supports parallel execution, we need to set the number of cores that
+will be used for parallel computation by:
+
+```
+    $ CafeInMaude> set-cores 4 .
+```
+
+Because the open-close environments are named as **inv1** in the proofs, we can infer
+the proof using:
+
+```
+    $ CafeInMaude> :infer-proof inv1 .
+```
+
+The proof can be stored in an external file by typing:
+
+```
+    $ CafeInMaude> :save-proof .
+```
+
+This proof can be loaded using:
+
+```
+    $ CafeInMaude> load ../examples/CCiMPG/2p-mutex/2p-proof.cafe .
+```
+
+In general, the examples in the **CCIMPG** folder provide a **commands_cimpg.cafe** file with the
+commands required to run the example using proof scores. For example, the **2p-mutex** folder contains a
+**commands_cimpg.cafe** file that can be loaded as follows:
+
+```
+    $ CafeInMaude> load ../examples/CCiMPG/2p-mutex/commands_cimpg.cafe .
+```
+
+Likewise, we include a **commands_generate.cafe** file with the commands for running the example and inferring
+the proof without proof scores. For example, the **2p-mutex** folder contains a
+**commands_generate.cafe** file that can be loaded as follows:
+
+```
+    $ CafeInMaude> load ../examples/CCiMPG/2p-mutex/commands_generate.cafe .
+```
+
+These files contain the commands for loading the modules, generating the proof, saving, and loading it,
+explained above.
+
+General commands
+----------------
+
+The following commands can be used for any tool:
+* **load PATH .**. This command executes the input stored in the file located at **PATH**.
+* **set-cores N .**. This command indicates that **N** processes can be used for concurrent computation.
+* **set-output PATH .**. This command sets **PATH** as the default output.
+* **:save-proof .**. This command stores the current proof in the text file previously indicated by means of
+**set-output**.
 
 The CafeInMaude Proof Assistant (CiMPA)
 ---------------------------------------
@@ -98,30 +172,20 @@ the proof tree). A goal is displayed with * if it has already been proved and wi
 A goal is displayed with * if it has already been proved and with
 **>** if it is the current one.
 
-The CafeInMaude Proof Generator (CiMPG)
----------------------------------------
+The CafeInMaude Proof Generator (CiMPG) & the CafeInMaude Proof Generator & Upper-Fixer (CiMPG+F)
+-------------------------------------------------------------------------------------------------
 
 The CafeInMaude Proof Generator provides annotations for inferring proof scripts for
 CiMPA from proof scores. These annotations are:
 * **:id(LAB)**, which indicates that the proof scores is associated to the proof for
 goal **LAB**.
-* **:proof(LAB)**, which asks CiMPG to generate the proof script for goal **LAB** by
+* **:infer-proof LAB .**, which asks CiMPG to generate the proof script for goal **LAB** by
 using the proof scores previously associated to this proof by means of **:id**.
+* If some open-close environments are missing, then CiMPG+F is used.
 
 CiMPG requires that:
-* All open-close environments open the same module, including the one for **:proof**.
+* All open-close environments open the same module.
 * All the reductions on these environments are related to the proof.
-
-The CafeInMaude Proof Generator & Upper-Fixer (CiMPG+F)
--------------------------------------------------------
-
-The CafeInMaude Proof Generator & Upper-Fixer (CiMPG+F) allows users to fix proofs
-when some proof scores were omitted and even generate proofs from scratch in some
-cases. The user is still required to create a proof score identified with **:id(LAB)**
-and including the properties he/she wants to prove. These properties must use variables
-for those arguments were induction should be applied and constants for the rest of
-arguments. Then, an extra open-close environment with the annotation **:infer(LAB)**
-must be used.
 
 Using the MFE (discontinued)
 ----------------------------
